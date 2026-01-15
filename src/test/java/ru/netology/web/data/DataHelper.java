@@ -25,11 +25,28 @@ public class DataHelper {
         return new VerificationCode("12345");
     }
 
-    // Добавляем информацию о картах
+    @Value
     public static class CardInfo {
-        public static final String FIRST_CARD_NUMBER = "5559 0000 0000 0001";
-        public static final String SECOND_CARD_NUMBER = "5559 0000 0000 0002";
-        public static final String FIRST_CARD_LAST_DIGITS = "0001";
-        public static final String SECOND_CARD_LAST_DIGITS = "0002";
+        private String cardNumber;
+        private String maskedNumber;
+    }
+
+    public static CardInfo getFirstCard() {
+        String cardNumber = "5559 0000 0000 0001";
+        return new CardInfo(cardNumber, maskCardNumber(cardNumber));
+    }
+
+    public static CardInfo getSecondCard() {
+        String cardNumber = "5559 0000 0000 0002";
+        return new CardInfo(cardNumber, maskCardNumber(cardNumber));
+    }
+
+    public static String maskCardNumber(String cardNumber) {
+        String cleanNumber = cardNumber.replaceAll("\\s+", "");
+        if (cleanNumber.length() < 4) {
+            return cardNumber;
+        }
+        String lastFour = cleanNumber.substring(cleanNumber.length() - 4);
+        return "**** **** **** " + lastFour;
     }
 }

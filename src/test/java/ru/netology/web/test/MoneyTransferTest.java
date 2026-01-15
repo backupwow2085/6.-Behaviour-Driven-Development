@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.netology.web.data.DataHelper;
+import ru.netology.web.data.DataHelper.CardInfo;
 import ru.netology.web.page.DashboardPage;
 import ru.netology.web.page.LoginPageV3;
 import ru.netology.web.page.VerificationPage;
@@ -16,11 +17,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class MoneyTransferTest {
     private DataHelper.AuthInfo authInfo;
     private DataHelper.VerificationCode verificationCode;
+    private CardInfo firstCard;
+    private CardInfo secondCard;
 
     @BeforeEach
     void setUp() {
         authInfo = DataHelper.getAuthInfo();
         verificationCode = DataHelper.getVerificationCodeFor(authInfo);
+        firstCard = DataHelper.getFirstCard();
+        secondCard = DataHelper.getSecondCard();
     }
 
     private DashboardPage login() {
@@ -29,78 +34,63 @@ class MoneyTransferTest {
         VerificationPage verificationPage = loginPage.validLogin(authInfo);
         return verificationPage.validVerify(verificationCode);
     }
-    // Проверка, что балансы карт изменились после перевода
-    private void verifyBalancesChanged(DashboardPage dashboardPage,
-                                       String firstCardDigits, int firstCardInitialBalance,
-                                       String secondCardDigits, int secondCardInitialBalance,
-                                       int transferAmount) {
-        int expectedFirstCardBalance = firstCardInitialBalance + transferAmount;
-        int expectedSecondCardBalance = secondCardInitialBalance - transferAmount;
-
-        int actualFirstCardBalance = dashboardPage.getCardBalance(firstCardDigits);
-        int actualSecondCardBalance = dashboardPage.getCardBalance(secondCardDigits);
-
-        assertEquals(expectedFirstCardBalance, actualFirstCardBalance,
-            String.format("Баланс карты %s не совпадает", firstCardDigits));
-        assertEquals(expectedSecondCardBalance, actualSecondCardBalance,
-            String.format("Баланс карты %s не совпадает", secondCardDigits));
-    }
-
-    // Проверка, что балансы карт не изменились
-    private void verifyBalancesNotChanged(DashboardPage dashboardPage,
-                                          String firstCardDigits, int firstCardInitialBalance,
-                                          String secondCardDigits, int secondCardInitialBalance) {
-        int actualFirstCardBalance = dashboardPage.getCardBalance(firstCardDigits);
-        int actualSecondCardBalance = dashboardPage.getCardBalance(secondCardDigits);
-
-        assertEquals(firstCardInitialBalance, actualFirstCardBalance,
-            String.format("Баланс карты %s изменился", firstCardDigits));
-        assertEquals(secondCardInitialBalance, actualSecondCardBalance,
-            String.format("Баланс карты %s изменился", secondCardDigits));
-    }
 
     @Test
-    @DisplayName("Успешный перевод 1000 рублей с карты 2 на карту 1")
+    @DisplayName("Успешный перевод 30% баланса с карты 2 на карту 1")
     void shouldTransferMoneyFromSecondToFirstCard() {
         DashboardPage dashboardPage = login();
 
-        int initialFirstCardBalance = dashboardPage.getCardBalance(DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS);
-        int initialSecondCardBalance = dashboardPage.getCardBalance(DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS);
+        int initialFirstCardBalance = dashboardPage.getCardBalance(firstCard);
+        int initialSecondCardBalance = dashboardPage.getCardBalance(secondCard);
 
-        var transferPage = dashboardPage.selectCardForTopUp(DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS);
+        int transferAmount = (int) (initialSecondCardBalance * 0.3);
+
+        if (transferAmount <= 0) {
+            transferAmount = 100;
+        }
+
+        var transferPage = dashboardPage.selectCardForTopUp(firstCard);
         dashboardPage = transferPage.transferFrom(
-                DataHelper.CardInfo.SECOND_CARD_NUMBER,
-                1000
+                secondCard.getCardNumber(),
+                transferAmount
         );
 
-        verifyBalancesChanged(
-                dashboardPage,
-                DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS, initialFirstCardBalance,
-                DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS, initialSecondCardBalance,
-                1000
-        );
+        int actualFirstCardBalance = dashboardPage.getCardBalance(firstCard);
+        int actualSecondCardBalance = dashboardPage.getCardBalance(secondCard);
+
+        assertEquals(initialFirstCardBalance + transferAmount, actualFirstCardBalance,
+                "Баланс первой карты должен увеличиться на " + transferAmount + " рублей");
+        assertEquals(initialSecondCardBalance - transferAmount, actualSecondCardBalance,
+                "Баланс второй карты должен уменьшиться на " + transferAmount + " рублей");
     }
 
     @Test
-    @DisplayName("Успешный перевод 500 рублей с карты 1 на карту 2")
+    @DisplayName("Успешный перевод половины баланса с карты 1 на карту 2")
     void shouldTransferMoneyFromFirstToSecondCard() {
         DashboardPage dashboardPage = login();
 
-        int initialFirstCardBalance = dashboardPage.getCardBalance(DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS);
-        int initialSecondCardBalance = dashboardPage.getCardBalance(DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS);
+        int initialFirstCardBalance = dashboardPage.getCardBalance(firstCard);
+        int initialSecondCardBalance = dashboardPage.getCardBalance(secondCard);
 
-        var transferPage = dashboardPage.selectCardForTopUp(DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS);
+        int transferAmount = initialFirstCardBalance / 2;
+
+        if (transferAmount <= 0) {
+            transferAmount = 100;
+        }
+
+        var transferPage = dashboardPage.selectCardForTopUp(secondCard);
         dashboardPage = transferPage.transferFrom(
-                DataHelper.CardInfo.FIRST_CARD_NUMBER,
-                500
+                firstCard.getCardNumber(),
+                transferAmount
         );
 
-        verifyBalancesChanged(
-                dashboardPage,
-                DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS, initialSecondCardBalance,
-                DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS, initialFirstCardBalance,
-                500
-        );
+        int actualFirstCardBalance = dashboardPage.getCardBalance(firstCard);
+        int actualSecondCardBalance = dashboardPage.getCardBalance(secondCard);
+
+        assertEquals(initialFirstCardBalance - transferAmount, actualFirstCardBalance,
+                "Баланс первой карты должен уменьшиться на " + transferAmount + " рублей");
+        assertEquals(initialSecondCardBalance + transferAmount, actualSecondCardBalance,
+                "Баланс второй карты должен увеличиться на " + transferAmount + " рублей");
     }
 
     @Test
@@ -108,17 +98,21 @@ class MoneyTransferTest {
     void shouldNotTransferToSameCard() {
         DashboardPage dashboardPage = login();
 
-        int initialFirstCardBalance = dashboardPage.getCardBalance(DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS);
-        int initialSecondCardBalance = dashboardPage.getCardBalance(DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS);
+        int initialFirstCardBalance = dashboardPage.getCardBalance(firstCard);
+        int initialSecondCardBalance = dashboardPage.getCardBalance(secondCard);
 
-        var transferPage = dashboardPage.selectCardForTopUp(DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS);
-        transferPage.transferFrom(DataHelper.CardInfo.FIRST_CARD_NUMBER, 100);
+        int transferAmount = initialFirstCardBalance / 10;
 
-        verifyBalancesNotChanged(
-                dashboardPage,
-                DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS, initialFirstCardBalance,
-                DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS, initialSecondCardBalance
-        );
+        var transferPage = dashboardPage.selectCardForTopUp(firstCard);
+        dashboardPage = transferPage.transferFrom(firstCard.getCardNumber(), transferAmount);
+
+        int actualFirstCardBalance = dashboardPage.getCardBalance(firstCard);
+        int actualSecondCardBalance = dashboardPage.getCardBalance(secondCard);
+
+        assertEquals(initialFirstCardBalance, actualFirstCardBalance,
+                "Баланс первой карты не должен измениться при переводе на себя");
+        assertEquals(initialSecondCardBalance, actualSecondCardBalance,
+                "Баланс второй карты не должен измениться");
     }
 
     @Test
@@ -126,18 +120,44 @@ class MoneyTransferTest {
     void shouldCancelTransferOperation() {
         DashboardPage dashboardPage = login();
 
-        int initialFirstCardBalance = dashboardPage.getCardBalance(DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS);
-        int initialSecondCardBalance = dashboardPage.getCardBalance(DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS);
+        int initialFirstCardBalance = dashboardPage.getCardBalance(firstCard);
+        int initialSecondCardBalance = dashboardPage.getCardBalance(secondCard);
 
-        var transferPage = dashboardPage.selectCardForTopUp(DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS);
-        transferPage.fillForm(DataHelper.CardInfo.SECOND_CARD_NUMBER, 1000);
+        int transferAmount = initialSecondCardBalance / 5;
+
+        var transferPage = dashboardPage.selectCardForTopUp(firstCard);
+        transferPage.fillForm(secondCard.getCardNumber(), transferAmount);
         dashboardPage = transferPage.cancel();
 
-        verifyBalancesNotChanged(
-                dashboardPage,
-                DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS, initialFirstCardBalance,
-                DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS, initialSecondCardBalance
-        );
+        int actualFirstCardBalance = dashboardPage.getCardBalance(firstCard);
+        int actualSecondCardBalance = dashboardPage.getCardBalance(secondCard);
+
+        assertEquals(initialFirstCardBalance, actualFirstCardBalance,
+                "Баланс первой карты не должен измениться после отмены");
+        assertEquals(initialSecondCardBalance, actualSecondCardBalance,
+                "Баланс второй карты не должен измениться после отмены");
+    }
+
+
+    @Test
+    @DisplayName("Перевод с пустой суммой")
+    void shouldNotTransferWithEmptyAmount() {
+        DashboardPage dashboardPage = login();
+
+        int initialFirstCardBalance = dashboardPage.getCardBalance(firstCard);
+        int initialSecondCardBalance = dashboardPage.getCardBalance(secondCard);
+
+        var transferPage = dashboardPage.selectCardForTopUp(firstCard);
+
+        dashboardPage = transferPage.transferFrom(secondCard.getCardNumber(), 0);
+
+        int actualFirstCardBalance = dashboardPage.getCardBalance(firstCard);
+        int actualSecondCardBalance = dashboardPage.getCardBalance(secondCard);
+
+        assertEquals(initialFirstCardBalance, actualFirstCardBalance,
+                "Баланс первой карты не должен измениться при переводе нулевой суммы");
+        assertEquals(initialSecondCardBalance, actualSecondCardBalance,
+                "Баланс второй карты не должен измениться при переводе нулевой суммы");
     }
 
     @Test
@@ -145,41 +165,23 @@ class MoneyTransferTest {
     void shouldNotTransferAmountExceedingBalance() {
         DashboardPage dashboardPage = login();
 
-        int initialFirstCardBalance = dashboardPage.getCardBalance(DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS);
-        int initialSecondCardBalance = dashboardPage.getCardBalance(DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS);
+        int initialFirstCardBalance = dashboardPage.getCardBalance(firstCard);
+        int initialSecondCardBalance = dashboardPage.getCardBalance(secondCard);
 
-        int excessiveAmount = initialSecondCardBalance + 5000;
+        int excessiveAmount = initialSecondCardBalance + 1;
 
-        var transferPage = dashboardPage.selectCardForTopUp(DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS);
+        var transferPage = dashboardPage.selectCardForTopUp(firstCard);
         dashboardPage = transferPage.transferFrom(
-                DataHelper.CardInfo.SECOND_CARD_NUMBER,
+                secondCard.getCardNumber(),
                 excessiveAmount
         );
 
-        verifyBalancesNotChanged(
-                dashboardPage,
-                DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS, initialFirstCardBalance,
-                DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS, initialSecondCardBalance
-        );
-    }
+        int actualFirstCardBalance = dashboardPage.getCardBalance(firstCard);
+        int actualSecondCardBalance = dashboardPage.getCardBalance(secondCard);
 
-    @Test
-    @DisplayName("Валидация: перевод с пустой суммой")
-    void shouldNotTransferWithEmptyAmount() {
-        DashboardPage dashboardPage = login();
-
-        int initialFirstCardBalance = dashboardPage.getCardBalance(DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS);
-        int initialSecondCardBalance = dashboardPage.getCardBalance(DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS);
-
-        var transferPage = dashboardPage.selectCardForTopUp(DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS);
-        transferPage.fillFrom(DataHelper.CardInfo.SECOND_CARD_NUMBER);
-        transferPage.fillAmount(0);
-        dashboardPage = transferPage.transfer();
-
-        verifyBalancesNotChanged(
-                dashboardPage,
-                DataHelper.CardInfo.FIRST_CARD_LAST_DIGITS, initialFirstCardBalance,
-                DataHelper.CardInfo.SECOND_CARD_LAST_DIGITS, initialSecondCardBalance
-        );
+        assertEquals(initialFirstCardBalance, actualFirstCardBalance,
+                "Баланс первой карты не должен измениться при переводе суммы превышающей баланс");
+        assertEquals(initialSecondCardBalance, actualSecondCardBalance,
+                "Баланс второй карты не должен измениться при переводе суммы превышающей баланс");
     }
 }
